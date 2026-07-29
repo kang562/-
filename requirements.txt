@@ -1,0 +1,5 @@
+PyQt6>=6.8,<7
+pynput>=1.7,<2
+Pillow>=10,<12
+PyInstaller>=6.11,<7
+pytest>=8.3,<9

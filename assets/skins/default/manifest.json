@@ -1,0 +1,10 @@
+{
+  "name": "木偶宠物",
+  "canvas": {
+    "width": 320,
+    "height": 400
+  },
+  "idle": [],
+  "typing": [],
+  "click": []
+}

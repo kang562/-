@@ -1,0 +1,212 @@
+import sys
+import random
+from PyQt6.QtWidgets import (QApplication, QMainWindow, QLabel,
+                                 QMenu, QAction)
+from PyQt6.QtGui import QPixmap, QPainter, QColor, QFont
+from PyQt6.QtCore import Qt, QTimer, QPoint, QThread
+from pynput import keyboard, mouse
+
+# ====================== 配置区（木偶桑多涅Q版参数） ======================
+WINDOW_SIZE = (320, 400)  # 窗口宽高适配Q版木偶
+PET_STATIC_PATH = "sandrone_q.png"  # Q版木偶静态贴图（你这张图抠透明底保存）
+# 互动文字池（木偶专属台词）
+DIALOG_TEXT = [
+    "嗯？你在敲什么呢",
+    "别乱点我，木偶会生气",
+    "键盘敲这么快，是在忙吗",
+    "我的裙子好看吗",
+    "别盯着我看啦",
+    "又按鼠标了，轻点~"
+]
+# 键鼠按键显示配色（匹配木偶黑红金服饰）
+KEY_BG_COLOR = QColor(40, 20, 25, 220)
+KEY_TEXT_COLOR = QColor(235, 180, 80)
+DIALOG_BG = QColor(255, 255, 255, 230)
+# ==============================================================================
+
+# 全局键鼠记录
+current_key = ""
+current_mouse_btn = ""
+
+# 键鼠监听后台线程
+class InputListenThread(QThread):
+    def run(self):
+        def on_key_press(key):
+            global current_key
+            try:
+                current_key = key.char.upper()
+            except AttributeError:
+                current_key = str(key).replace("Key.", "").upper()
+        def on_mouse_click(x, y, button, pressed):
+            global current_mouse_btn
+            if pressed:
+                if button == mouse.Button.left:
+                    current_mouse_btn = "鼠标左键"
+                elif button == mouse.Button.right:
+                    current_mouse_btn = "鼠标右键"
+                elif button == mouse.Button.middle:
+                    current_mouse_btn = "鼠标滚轮"
+            else:
+                current_mouse_btn = ""
+        # 启动监听
+        key_listener = keyboard.Listener(on_press=on_key_press)
+        mouse_listener = mouse.Listener(on_click=on_mouse_click)
+        key_listener.start()
+        mouse_listener.start()
+        self.exec()
+
+# 主桌宠窗口
+class SandronePet(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        # 窗口基础设置：无边框、透明、置顶、可拖拽
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint
+                             | Qt.WindowType.WindowStaysOnTopHint
+                             | Qt.WindowType.SubWindow)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.resize(*WINDOW_SIZE)
+        # 加载木偶Q版贴图
+        self.pet_label = QLabel(self)
+        self.pet_label.setGeometry(0, 0, *WINDOW_SIZE)
+        self.load_pet_img()
+        # 拖拽变量
+        self.drag_pos = QPoint()
+        # 弹窗文字计时器（按键提示、对话气泡自动消失）
+        self.timer_show = QTimer(self)
+        self.timer_show.timeout.connect(self.clear_tips)
+        self.timer_show.setInterval(1800)
+        # 随机对话计时器
+        self.timer_random_talk = QTimer(self)
+        self.timer_random_talk.timeout.connect(self.random_talk)
+        self.timer_random_talk.setInterval(12000)
+        self.timer_random_talk.start()
+        # 键鼠监听线程启动
+        self.input_thread = InputListenThread()
+        self.input_thread.start()
+        # 存储当前显示的提示文字
+        self.tip_text = ""
+
+    def load_pet_img(self):
+        """加载Q版木偶桑多涅透明贴图"""
+        pix = QPixmap(PET_STATIC_PATH)
+        if pix.isNull():
+            # 贴图缺失时绘制简易Q版木偶轮廓兜底
+            pix = QPixmap(*WINDOW_SIZE)
+            pix.fill(Qt.transparent)
+            painter = QPainter(pix)
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+            # 绘制桑多涅标志性白莲花发饰
+            painter.setBrush(QColor(245, 240, 230))
+            painter.drawEllipse(100, 5, 120, 90)
+            # 浅灰头发
+            painter.setBrush(QColor(170, 165, 160))
+            painter.drawEllipse(70, 60, 180, 200)
+            # 蓝色大眼睛
+            painter.setBrush(QColor(60, 130, 240))
+            painter.drawEllipse(100, 120, 55, 65)
+            painter.drawEllipse(165, 120, 55, 65)
+            # 黑红礼服
+            painter.setBrush(QColor(25, 20, 30))
+            painter.drawRect(85, 240, 150, 160)
+            painter.setBrush(QColor(160, 20, 30))
+            painter.drawRect(110, 255, 100, 30)
+            painter.end()
+        self.pet_label.setPixmap(pix)
+        self.pet_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+    def paintEvent(self, event):
+        """绘制按键提示气泡、对话气泡"""
+        super().paintEvent(event)
+        if not self.tip_text:
+            return
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        font = QFont("微软雅黑", 13, QFont.Weight.Bold)
+        painter.setFont(font)
+        # 气泡尺寸自适应文字
+        text_rect = painter.boundingRect(QRect(0, 0, 300, 60), Qt.TextFlag.TextSingleLine, self.tip_text)
+        bubble_rect = text_rect.adjusted(-12, -8, 12, 8)
+        bubble_rect.moveTopLeft(QPoint((WINDOW_SIZE[0]-bubble_rect.width())//2, 10))
+        # 绘制气泡背景
+        painter.setBrush(DIALOG_BG)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.drawRoundedRect(bubble_rect, 12, 12)
+        # 绘制文字
+        painter.setPen(QColor(30, 30, 30))
+        painter.drawText(text_rect, Qt.AlignmentFlag.AlignCenter, self.tip_text)
+
+    def mousePressEvent(self, event):
+        """鼠标点击宠物：弹出随机对话，记录拖拽起点"""
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.drag_pos = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
+            self.random_talk()
+        # 右键菜单
+        elif event.button() == Qt.MouseButton.RightButton:
+            menu = QMenu(self)
+            act_size = QAction("调整大小", self)
+            act_top = QAction("置顶开关", self)
+            act_exit = QAction("退出桌宠", self)
+            menu.addAction(act_size)
+            menu.addAction(act_top)
+            menu.addSeparator()
+            menu.addAction(act_exit)
+            action = menu.exec(event.globalPosition().toPoint())
+            if action == act_exit:
+                QApplication.quit()
+            elif action == act_top:
+                flag = self.windowFlags()
+                if flag & Qt.WindowType.WindowStaysOnTopHint:
+                    self.setWindowFlags(flag & ~Qt.WindowType.WindowStaysOnTopHint)
+                else:
+                    self.setWindowFlags(flag | Qt.WindowType.WindowStaysOnTopHint)
+                self.show()
+            elif action == act_size:
+                self.resize(WINDOW_SIZE[0]+60, WINDOW_SIZE[1]+60)
+
+    def mouseMoveEvent(self, event):
+        """拖拽移动窗口"""
+        if event.buttons() == Qt.MouseButton.LeftButton:
+            new_pos = event.globalPosition().toPoint() - self.drag_pos
+            self.move(new_pos)
+
+    def random_talk(self):
+        """随机弹出木偶专属对话"""
+        self.tip_text = random.choice(DIALOG_TEXT)
+        self.timer_show.start()
+        self.update()
+
+    def clear_tips(self):
+        """清空气泡文字"""
+        global current_key, current_mouse_btn
+        current_key = ""
+        current_mouse_btn = ""
+        self.tip_text = ""
+        self.timer_show.stop()
+        self.update()
+
+    def key_monitor_update(self):
+        """键鼠触发，显示按键提示"""
+        global current_key, current_mouse_btn
+        show_str = ""
+        if current_key:
+            show_str = f"按下按键：{current_key}"
+        elif current_mouse_btn:
+            show_str = f"点击{current_mouse_btn}"
+        if show_str:
+            self.tip_text = show_str
+            self.timer_show.start()
+            self.update()
+
+    def timerEvent(self, event):
+        # 持续轮询键鼠状态更新气泡
+        self.key_monitor_update()
+        super().timerEvent(event)
+
+if __name__ == "__main__":
+    app = QApplication(sys.argv)
+    pet = SandronePet()
+    # 窗口初始位置右下角
+    screen = app.primaryScreen().availableGeometry()
+    pet.move(screen.width() - WINDOW_SIZE[0] - 20, screen.height() - WINDOW_SIZE[1] - 80)
+    pet.show()
+    sys.exit(app.exec())

@@ -1,0 +1,11 @@
+{
+  "skin": "default",
+  "always_on_top": true,
+  "input_display_enabled": true,
+  "bubble_duration_ms": 1800,
+  "window_scale": 1.0,
+  "position": {
+    "x": null,
+    "y": null
+  }
+}

@@ -1,0 +1,9 @@
+[project]
+name = "desktop-pet"
+version = "0.1.0"
+description = "A Windows desktop pet with optional input hints."
+requires-python = ">=3.10"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
